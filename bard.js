@@ -34,10 +34,14 @@
     var debugging = false;
     var logCounter = 0;
     var okGlobals = [];
+    var providerLoaderArray = [];
+    var providerLoaderCache = {};
 
     addBindPolyfill();
 
     beforeEach(function bardTopBeforeEach() {
+        providerLoaderArray = [providerLoader];
+        providerLoaderCache = {};
         currentSpec = this;
     });
 
@@ -184,8 +188,15 @@
     function appModule() {
         var args = Array.prototype.slice.call(arguments, 0);
         args = args.concat(fakeRouteHelperProvider, fakeRouteProvider,
-                           fakeStateProvider, fakeToastr);
+                           fakeStateProvider, fakeToastr, [providerLoaderArray]);
         return angular.mock.module.apply(angular.mock, args);
+    }
+
+    function providerLoader() {
+        var args = Array.prototype.slice.call(arguments);
+        args.forEach(function(provider, ix) {
+            providerLoaderCache[providerLoaderArray[ix]] = provider;
+        });
     }
 
     /**
@@ -289,6 +300,10 @@
         }
         // else assume all args are strings
 
+        providerLoaderArray.unshift.apply(providerLoaderArray, args.filter(function (name) {
+            return typeof name === 'string' && name.slice(-8) === 'Provider';
+        }));
+
         var $injector = currentSpec.$injector;
         if (!$injector) {
             angular.mock.inject(); // create the injector
@@ -301,7 +316,7 @@
             if (typeof name !== 'string') {
                 return; // WAT? Only strings allowed. Let's skip it and move on.
             }
-            var value = $injector.get(name);
+            var value = providerLoaderCache[name] || $injector.get(name);
             if (value == null) { return; }
 
             var pathName = name.split('.');
